@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&family=Playfair+Display:wght@400;700;900&family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&family=Anton&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Jost", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --ink: #191f28;
+  --paper: #ffffff;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  overflow-x: hidden;
+}
+
+/* Cyber Halftone Texture */
+.grain-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.12;
+  background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.5' fill='%23000'/%3E%3Ccircle cx='3' cy='3' r='0.5' fill='%23000'/%3E%3C/svg%3E");
+  background-size: 4px 4px;
+}
+
+/* UI Glow */
+.glow-text {
+  text-shadow: 0 0 10px rgba(25, 31, 40, 0.2);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ink);
+  border-radius: 10px;
+}
+
+.blur-transition {
+  transition: filter 0.8s ease, opacity 0.8s ease, transform 0.8s ease;
+}

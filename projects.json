@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "category": "##",
+    "title": "Quantum Data Stream",
+    "description": "An experimental visualization of real-time quantum fluctuations in a simulated environment. This project explores the intersection of particle physics and generative art.",
+    "image": "https://picsum.photos/seed/quantum/1200/800"
+  },
+  {
+    "id": 2,
+    "category": "##",
+    "title": "Neural Network Topography",
+    "description": "Mapping the hidden layers of a deep learning model into a 3D landscape. Each peak represents a high-activation neuron, creating a digital mountain range of thought.",
+    "image": "https://picsum.photos/seed/neural/1200/800"
+  },
+  {
+    "id": 3,
+    "category": "Data Visualization & Information Design",
+    "title": "The Global Pulse",
+    "description": "A comprehensive information design project visualizing global trade routes and their environmental impact over the last decade. Focused on clarity and narrative flow.",
+    "image": "https://picsum.photos/seed/pulse/1200/800"
+  },
+  {
+    "id": 4,
+    "category": "Data Visualization & Information Design",
+    "title": "Urban Metabolism",
+    "description": "Visualizing the energy and resource consumption of a smart city. This interactive dashboard helps urban planners identify inefficiencies in real-time.",
+    "image": "https://picsum.photos/seed/urban/1200/800"
+  },
+  {
+    "id": 5,
+    "category": "@",
+    "title": "Cybernetic Organism",
+    "description": "A series of digital sculptures exploring the fusion of biological forms with mechanical structures. Rendered with custom shaders for a unique retro-cyber feel.",
+    "image": "https://picsum.photos/seed/cyber/1200/800"
+  },
+  {
+    "id": 6,
+    "category": "@",
+    "title": "Void Echoes",
+    "description": "An immersive audio-visual experience that translates sound waves into geometric patterns. The visuals react dynamically to the frequency and amplitude of the input.",
+    "image": "https://picsum.photos/seed/void/1200/800"
+  }
+]
