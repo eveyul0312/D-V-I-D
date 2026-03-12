@@ -4,7 +4,23 @@ import { DiceScene } from './three-scene';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Rnd } from 'react-rnd';
-import { Edit2, Check, Type, Move, Maximize2, ChevronDown, Image as ImageIcon, Upload } from 'lucide-react';
+import { Edit2, Check, Type, Move, Maximize2, ChevronDown, Image as ImageIcon, Upload, LogIn, LogOut } from 'lucide-react';
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  doc, 
+  collection, 
+  onSnapshot, 
+  setDoc, 
+  getDoc,
+  handleFirestoreError,
+  OperationType,
+  User
+} from './firebase';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -22,7 +38,7 @@ interface Project {
   categoryLayout?: any;
 }
 
-function EditableSubCategory({ subCategory, isActive, onClick, onContextMenu, onSave }: { subCategory: string; isActive: boolean; onClick: () => void; onContextMenu: (e: React.MouseEvent) => void; onSave: (newName: string) => void }) {
+function EditableSubCategory({ subCategory, isActive, isAdmin, onClick, onContextMenu, onSave }: { subCategory: string; isActive: boolean; isAdmin: boolean; onClick: () => void; onContextMenu: (e: React.MouseEvent) => void; onSave: (newName: string) => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(subCategory);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -33,7 +49,7 @@ function EditableSubCategory({ subCategory, isActive, onClick, onContextMenu, on
     }
   }, [isEditing]);
 
-  if (isEditing) {
+  if (isEditing && isAdmin) {
     return (
       <input
         ref={inputRef}
@@ -59,7 +75,7 @@ function EditableSubCategory({ subCategory, isActive, onClick, onContextMenu, on
   return (
     <button
       onClick={onClick}
-      onDoubleClick={() => setIsEditing(true)}
+      onDoubleClick={() => isAdmin && setIsEditing(true)}
       onContextMenu={onContextMenu}
       className={cn(
         "text-sm font-medium tracking-widest uppercase transition-colors duration-300 text-left",
@@ -94,33 +110,112 @@ export default function App() {
     introWidth: 250,
     introLineHeight: 1.6
   });
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const isAdmin = user?.email === 'eveyul0224@sookmyung.ac.kr';
+
   const diceSceneRef = useRef<DiceScene | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const categoryContainerRef = useRef<HTMLDivElement>(null);
 
-  const saveData = (updatedProjects: Project[], updatedCategories: string[], updatedSubCategories: Record<string, string[]>) => {
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login failed:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  const saveData = async (updatedProjects: Project[], updatedCategories: string[], updatedSubCategories: Record<string, string[]>) => {
+    if (!isAdmin) return;
+    
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setIsSaving(true);
-    saveTimeoutRef.current = setTimeout(() => {
-      Promise.all([
-        fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedProjects) }),
-        fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedCategories) }),
-        fetch('/api/subCategories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedSubCategories) })
-      ]).finally(() => setIsSaving(false));
+    
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        // Save projects to Firestore
+        const batch = updatedProjects.map(p => 
+          setDoc(doc(db, 'projects', p.id.toString()), p)
+        );
+        
+        // Save metadata (categories, subcategories)
+        const metadataPromise = setDoc(doc(db, 'metadata', 'structure'), {
+          categories: updatedCategories,
+          subCategories: updatedSubCategories
+        });
+
+        await Promise.all([...batch, metadataPromise]);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, 'projects/metadata');
+      } finally {
+        setIsSaving(false);
+      }
     }, 1000);
+  };
+
+  const saveProfile = async (updatedProfile: any) => {
+    if (!isAdmin) return;
+    setIsSaving(true);
+    try {
+      await setDoc(doc(db, 'profile', 'main'), updatedProfile);
+      setProfile(updatedProfile);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'profile/main');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const { scrollY } = useScroll();
   const heroOpacity = useTransform(scrollY, [0, 500], [1, 0]);
 
   useEffect(() => {
-    fetch('/api/projects')
-      .then(res => res.json())
-      .then(data => setProjects(data));
-      
-    fetch('/api/profile')
-      .then(res => res.json())
-      .then(data => setProfile(data));
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // Fetch projects
+    const unsubProjects = onSnapshot(collection(db, 'projects'), (snapshot) => {
+      const projectsData = snapshot.docs.map(doc => doc.data() as Project);
+      if (projectsData.length > 0) {
+        setProjects(projectsData.sort((a, b) => b.id - a.id));
+      }
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'projects'));
+
+    // Fetch profile
+    const unsubProfile = onSnapshot(doc(db, 'profile', 'main'), (snapshot) => {
+      if (snapshot.exists()) {
+        setProfile(snapshot.data() as any);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'profile/main'));
+
+    // Fetch metadata
+    const unsubMetadata = onSnapshot(doc(db, 'metadata', 'structure'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.categories) setCategories(data.categories);
+        if (data.subCategories) setSubCategories(data.subCategories);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'metadata/structure'));
+
+    return () => {
+      unsubProjects();
+      unsubProfile();
+      unsubMetadata();
+    };
   }, []);
 
   const handleCategoryHover = (category: string) => {
@@ -239,6 +334,7 @@ export default function App() {
   };
 
   const handleContextMenu = (e: React.MouseEvent, target: string, type: 'category' | 'subCategory' | 'emptyPage' | 'portfolio') => {
+    if (!isAdmin) return;
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, target, type });
   };
@@ -450,6 +546,27 @@ export default function App() {
         </div>
       )}
       <div className="grain-overlay" />
+      {/* Auth Button */}
+      <div className="fixed top-6 right-6 z-[100]">
+        {user ? (
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-2 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white px-4 py-2 rounded-full transition-all text-xs font-medium border border-white/10"
+          >
+            <LogOut size={14} />
+            {user.email}
+          </button>
+        ) : (
+          <button 
+            onClick={handleLogin}
+            className="flex items-center gap-2 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white px-4 py-2 rounded-full transition-all text-xs font-medium border border-white/10"
+          >
+            <LogIn size={14} />
+            Login
+          </button>
+        )}
+      </div>
+
       <AnimatePresence mode="wait">
         {currentPage === 'main' ? (
           <motion.div
@@ -502,14 +619,8 @@ export default function App() {
               <div className="absolute bottom-12 left-12 z-50">
                 <ProfileEditor 
                   profile={profile} 
-                  onSave={(newProfile) => {
-                    setProfile(newProfile);
-                    fetch('/api/profile', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(newProfile)
-                    }).catch(err => console.error("Failed to save profile:", err));
-                  }} 
+                  onSave={saveProfile} 
+                  isAdmin={isAdmin}
                 />
               </div>
             </motion.section>
@@ -533,6 +644,7 @@ export default function App() {
                       key={project.id} 
                       project={project} 
                       index={index} 
+                      isAdmin={isAdmin}
                       onClick={() => handleProjectClick(project)}
                       onUpdateProject={handleUpdateProject}
                       onAddProject={() => handleAddProject(activeCategory, true)}
@@ -546,15 +658,13 @@ export default function App() {
                 <h3 className="text-[15px] font-[system-ui] font-bold uppercase tracking-widest mb-4">Contact</h3>
                 <input
                   value={(profile as any).contact || "hello@eveyul.com"}
-                  onChange={(e) => setProfile({...profile, contact: e.target.value})}
-                  onBlur={() => {
-                    fetch('/api/profile', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(profile)
-                    }).catch(err => console.error("Failed to save profile:", err));
-                  }}
-                  className="text-[19px] font-[system-ui] font-light outline-none bg-transparent w-full max-w-md text-white"
+                  readOnly={!isAdmin}
+                  onChange={(e) => isAdmin && setProfile({...profile, contact: e.target.value})}
+                  onBlur={() => isAdmin && saveProfile(profile)}
+                  className={cn(
+                    "text-[19px] font-[system-ui] font-light outline-none bg-transparent w-full max-w-md text-white",
+                    isAdmin ? "cursor-text" : "cursor-default"
+                  )}
                   placeholder="Enter your email or contact info"
                 />
               </div>
@@ -602,6 +712,7 @@ export default function App() {
                   key={sub}
                   subCategory={sub}
                   isActive={activeSubCategory === sub}
+                  isAdmin={isAdmin}
                   onClick={() => setActiveSubCategory(sub)}
                   onContextMenu={(e: React.MouseEvent) => handleContextMenu(e, sub, 'subCategory')}
                   onSave={(newName) => {
@@ -624,27 +735,31 @@ export default function App() {
                   }}
                 />
               ))}
-              <button onClick={() => {
-                const currentSubs = subCategories[activeCategory] || [];
-                const newSub = `${currentSubs.length + 1}주차`;
-                const updatedSubCategories = { ...subCategories, [activeCategory]: [...currentSubs, newSub] };
-                setSubCategories(updatedSubCategories);
-                saveData(projects, categories, updatedSubCategories);
-              }} className="opacity-40 hover:opacity-100">+</button>
+              {isAdmin && (
+                <button onClick={() => {
+                  const currentSubs = subCategories[activeCategory] || [];
+                  const newSub = `${currentSubs.length + 1}주차`;
+                  const updatedSubCategories = { ...subCategories, [activeCategory]: [...currentSubs, newSub] };
+                  setSubCategories(updatedSubCategories);
+                  saveData(projects, categories, updatedSubCategories);
+                }} className="opacity-40 hover:opacity-100">+</button>
+              )}
             </aside>
 
             {/* Project List */}
             <div ref={categoryContainerRef} className="pt-48 pb-24 px-12 max-w-5xl mx-auto">
               {/* Floating Action Button for Edit Mode */}
-              <button
-                onClick={() => setIsCategoryEditMode(!isCategoryEditMode)}
-                className={cn(
-                  "fixed bottom-12 right-12 w-16 h-16 rounded-full flex items-center justify-center z-[100] shadow-2xl transition-all duration-500",
-                  isCategoryEditMode ? "bg-black text-white rotate-0" : "bg-white text-black hover:scale-110"
-                )}
-              >
-                {isCategoryEditMode ? <Check size={24} /> : <Edit2 size={24} />}
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setIsCategoryEditMode(!isCategoryEditMode)}
+                  className={cn(
+                    "fixed bottom-12 right-12 w-16 h-16 rounded-full flex items-center justify-center z-[100] shadow-2xl transition-all duration-500",
+                    isCategoryEditMode ? "bg-black text-white rotate-0" : "bg-white text-black hover:scale-110"
+                  )}
+                >
+                  {isCategoryEditMode ? <Check size={24} /> : <Edit2 size={24} />}
+                </button>
+              )}
               {isSaving && (
                 <div className="fixed bottom-32 right-12 z-[100]">
                   <span className="text-[10px] uppercase font-bold tracking-widest opacity-50 animate-pulse bg-white px-2 py-1 rounded">
@@ -682,6 +797,7 @@ export default function App() {
           <ProjectDetail 
             key="detail"
             project={selectedProject!} 
+            isAdmin={isAdmin}
             onBack={handleBack} 
             onUpdateProject={handleUpdateProject}
           />
@@ -712,7 +828,7 @@ function DiceComponent({ onMount }: { onMount: (scene: DiceScene) => void }) {
   );
 }
 
-function PortfolioGridItem({ project, index, onClick, onUpdateProject, onAddProject, onDeleteProject }: { project: Project; index: number; onClick: () => void; onUpdateProject: (p: Project) => void; onAddProject: () => void; onDeleteProject: () => void; }) {
+function PortfolioGridItem({ project, index, isAdmin, onClick, onUpdateProject, onAddProject, onDeleteProject }: { project: Project; index: number; isAdmin: boolean; onClick: () => void; onUpdateProject: (p: Project) => void; onAddProject: () => void; onDeleteProject: () => void; }) {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(project.title);
@@ -725,6 +841,7 @@ function PortfolioGridItem({ project, index, onClick, onUpdateProject, onAddProj
   }, [project.title, project.description]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    if (!isAdmin) return;
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY });
@@ -1034,7 +1151,7 @@ function CategoryBlogBlock({ project, index, onClick, isEditMode, onUpdateProjec
   );
 }
 
-function ProjectDetail({ project, onBack, onUpdateProject }: { project: Project; onBack: () => void; onUpdateProject: (p: Project) => void }) {
+function ProjectDetail({ project, isAdmin, onBack, onUpdateProject }: { project: Project; isAdmin: boolean; onBack: () => void; onUpdateProject: (p: Project) => void }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [layout, setLayout] = useState<any>(project.layout || {
     heroImg: { x: 0, y: 0, width: 600, height: 600, src: project.image, wrapText: false },
@@ -1060,7 +1177,7 @@ function ProjectDetail({ project, onBack, onUpdateProject }: { project: Project;
   const [contextMenu, setContextMenu] = useState<{ clientX: number, clientY: number, relX: number, relY: number } | null>(null);
 
   const handleContextMenu = (e: React.MouseEvent) => {
-    if (!isEditMode) return;
+    if (!isAdmin || !isEditMode) return;
     e.preventDefault();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setContextMenu({ 
@@ -1167,15 +1284,17 @@ function ProjectDetail({ project, onBack, onUpdateProject }: { project: Project;
       </header>
 
       {/* Floating Action Button */}
-      <button
-        onClick={handleToggleEdit}
-        className={cn(
-          "fixed bottom-12 right-12 w-16 h-16 rounded-full flex items-center justify-center z-[100] shadow-2xl transition-all duration-500",
-          isEditMode ? "bg-black text-white rotate-0" : "bg-white text-black hover:scale-110"
-        )}
-      >
-        {isEditMode ? <Check size={24} /> : <Edit2 size={24} />}
-      </button>
+      {isAdmin && (
+        <button
+          onClick={handleToggleEdit}
+          className={cn(
+            "fixed bottom-12 right-12 w-16 h-16 rounded-full flex items-center justify-center z-[100] shadow-2xl transition-all duration-500",
+            isEditMode ? "bg-black text-white rotate-0" : "bg-white text-black hover:scale-110"
+          )}
+        >
+          {isEditMode ? <Check size={24} /> : <Edit2 size={24} />}
+        </button>
+      )}
 
       {/* Editorial Content */}
       <article 
@@ -1656,7 +1775,7 @@ function EditableText({ layout, isEditMode, fonts, onChange, onDelete, className
   );
 }
 
-function ProfileEditor({ profile, onSave }: { profile: { name: string, intro: string, introWidth?: number, introLineHeight?: number }, onSave: (p: any) => void }) {
+function ProfileEditor({ profile, onSave, isAdmin }: { profile: { name: string, intro: string, introWidth?: number, introLineHeight?: number }, onSave: (p: any) => void, isAdmin: boolean }) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(profile.name);
   const [intro, setIntro] = useState(profile.intro);
@@ -1691,7 +1810,7 @@ function ProfileEditor({ profile, onSave }: { profile: { name: string, intro: st
   const hasKorean = (text: string) => /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text);
   const fontSize = hasKorean(intro) ? '15px' : '17px';
 
-  if (isEditing) {
+  if (isEditing && isAdmin) {
     return (
       <div ref={containerRef} className="flex flex-col gap-3 bg-white/90 backdrop-blur-md p-5 rounded-xl shadow-2xl border border-gray-100 min-w-[300px] z-[100]">
         <div className="flex flex-col gap-1">
@@ -1752,8 +1871,11 @@ function ProfileEditor({ profile, onSave }: { profile: { name: string, intro: st
 
   return (
     <div 
-      className="flex flex-col gap-1 cursor-pointer hover:opacity-70 transition-opacity"
-      onDoubleClick={() => setIsEditing(true)}
+      className={cn(
+        "flex flex-col gap-1 transition-opacity",
+        isAdmin ? "cursor-pointer hover:opacity-70" : ""
+      )}
+      onDoubleClick={() => isAdmin && setIsEditing(true)}
     >
       <h2 
         className="font-medium tracking-tighter"

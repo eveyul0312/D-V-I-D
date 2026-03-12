@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+             request.auth.token.email == "eveyul0224@sookmyung.ac.kr" && 
+             request.auth.token.email_verified == true;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Data Validators
+    // ===============================================================
+    function isValidProject(data) {
+      return data.id is number &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200;
+    }
+
+    function isValidProfile(data) {
+      return data.name is string && data.name.size() < 100 &&
+             (!('intro' in data) || (data.intro is string && data.intro.size() < 2000));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidProject(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /profile/{docId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidProfile(request.resource.data);
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A portfolio project item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "category": { "type": "string" },
+        "subCategory": { "type": "string" },
+        "isPortfolio": { "type": "boolean" },
+        "layout": { "type": "object" },
+        "categoryLayout": { "type": "object" }
+      },
+      "required": ["id", "title"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "intro": { "type": "string" },
+        "contact": { "type": "string" },
+        "introWidth": { "type": "number" },
+        "introLineHeight": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Collection of portfolio projects"
+    },
+    "/profile/main": {
+      "schema": "Profile",
+      "description": "The main profile document"
+    }
+  }
+}
