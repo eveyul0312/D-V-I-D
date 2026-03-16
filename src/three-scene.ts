@@ -241,17 +241,24 @@ export class DiceScene {
   private animate() {
     this.frameId = requestAnimationFrame(this.animate);
 
-    // Idle floating animation
+    // Enhanced floating animation
     const time = Date.now() * 0.001;
-    this.cube.position.y = Math.sin(time) * 0.1;
+    // Main vertical float
+    this.cube.position.y = Math.sin(time * 0.8) * 0.4;
+    // Subtle horizontal sway
+    this.cube.position.x = Math.cos(time * 0.5) * 0.2;
+    // Subtle depth float
+    this.cube.position.z = Math.sin(time * 0.3) * 0.1;
     
     // Smooth rotation easing
     this.cube.rotation.x += (this.targetRotation.x - this.cube.rotation.x) * 0.05;
     this.cube.rotation.y += (this.targetRotation.y - this.cube.rotation.y) * 0.05;
     this.cube.rotation.z += (this.targetRotation.z - this.cube.rotation.z) * 0.05;
 
-    // Subtle continuous rotation
+    // Subtle continuous rotation + floating tilt
     this.cube.rotation.y += 0.002;
+    this.cube.rotation.x += Math.sin(time * 0.4) * 0.001;
+    this.cube.rotation.z += Math.cos(time * 0.6) * 0.001;
 
     this.renderer.render(this.scene, this.camera);
   }
