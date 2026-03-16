@@ -4,7 +4,8 @@ import { DiceScene } from './three-scene';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Rnd } from 'react-rnd';
-import { Edit2, Check, Type, Move, Maximize2, ChevronDown, Image as ImageIcon, Upload, LogIn, LogOut } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
+import { Edit2, Check, Type, Move, Maximize2, ChevronDown, Image as ImageIcon, Upload, LogIn, LogOut, X } from 'lucide-react';
 import { 
   auth, 
   db, 
@@ -94,6 +95,7 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState<string>('##');
   const [isCategoryEditMode, setIsCategoryEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [previousPage, setPreviousPage] = useState<'main' | 'category'>('main');
   const [categories, setCategories] = useState<string[]>(['##', 'Data Visualization & Information Design', '@']);
   const [subCategories, setSubCategories] = useState<Record<string, string[]>>({
@@ -136,12 +138,23 @@ export default function App() {
 
   const saveData = async (updatedProjects: Project[], updatedCategories: string[], updatedSubCategories: Record<string, string[]>) => {
     if (!isAdmin) return;
+    setSaveError(null);
     
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setIsSaving(true);
     
     saveTimeoutRef.current = setTimeout(async () => {
       try {
+        // Check for oversized projects
+        for (const p of updatedProjects) {
+          const size = new Blob([JSON.stringify(p)]).size;
+          if (size > 1048576) {
+             setSaveError(`Project "${p.title}" is too large (${(size / 1024 / 1024).toFixed(2)}MB). Firestore limit is 1MB. Please re-upload images for this project to compress them.`);
+             setIsSaving(false);
+             return;
+          }
+        }
+
         // Save projects to Firestore
         const batch = updatedProjects.map(p => 
           setDoc(doc(db, 'projects', p.id.toString()), p)
@@ -154,8 +167,12 @@ export default function App() {
         });
 
         await Promise.all([...batch, metadataPromise]);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, 'projects & metadata');
+      } catch (error: any) {
+        if (error.message?.includes('exceeds the maximum allowed size')) {
+          setSaveError("One or more documents exceed Firestore's 1MB limit. Please re-upload images to compress them.");
+        } else {
+          handleFirestoreError(error, OperationType.WRITE, 'projects & metadata');
+        }
       } finally {
         setIsSaving(false);
       }
@@ -164,12 +181,17 @@ export default function App() {
 
   const saveProfile = async (updatedProfile: any) => {
     if (!isAdmin) return;
+    setSaveError(null);
     setIsSaving(true);
     try {
       await setDoc(doc(db, 'profile', 'main'), updatedProfile);
       setProfile(updatedProfile);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'profile/main');
+    } catch (error: any) {
+      if (error.message?.includes('exceeds the maximum allowed size')) {
+        setSaveError("Profile data is too large. Please reduce text or image sizes.");
+      } else {
+        handleFirestoreError(error, OperationType.WRITE, 'profile/main');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -710,13 +732,7 @@ export default function App() {
                   {isCategoryEditMode ? <Check size={24} /> : <Edit2 size={24} />}
                 </button>
               )}
-              {isSaving && (
-                <div className="fixed bottom-32 right-12 z-[100]">
-                  <span className="text-[10px] uppercase font-bold tracking-widest opacity-50 animate-pulse bg-white px-2 py-1 rounded">
-                    Saving...
-                  </span>
-                </div>
-              )}
+              
               
                   {projects.filter(p => p.category === activeCategory && (p.subCategory || '1주차') === activeSubCategory && !p.isPortfolio).length === 0 ? (
                 <div 
@@ -753,6 +769,28 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* Global Status Indicators */}
+      <div className="fixed bottom-32 right-12 z-[100] flex flex-col items-end gap-4 pointer-events-none">
+        {isSaving && (
+          <span className="text-[10px] uppercase font-bold tracking-widest opacity-50 animate-pulse bg-white text-black px-2 py-1 rounded shadow-lg">
+            Saving...
+          </span>
+        )}
+        {saveError && (
+          <div className="max-w-xs pointer-events-auto">
+            <div className="bg-red-500 text-white text-[10px] uppercase font-bold tracking-widest p-3 rounded-xl shadow-2xl flex flex-col gap-2">
+              <div className="flex justify-between items-center">
+                <span>Error</span>
+                <button onClick={() => setSaveError(null)} className="hover:opacity-50 transition-opacity">
+                  <X size={12} />
+                </button>
+              </div>
+              <p className="opacity-90 leading-tight">{saveError}</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -797,14 +835,30 @@ function PortfolioGridItem({ project, index, isAdmin, onClick, onUpdateProject, 
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        onUpdateProject({ ...project, image: event.target?.result as string });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const options = {
+          maxSizeMB: 0.7,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true
+        };
+        const compressedFile = await imageCompression(file, options);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          onUpdateProject({ ...project, image: event.target?.result as string });
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        console.error("Image compression failed:", error);
+        // Fallback to original if compression fails for some reason
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          onUpdateProject({ ...project, image: event.target?.result as string });
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -1451,14 +1505,29 @@ function ProjectDetail({ project, isAdmin, onBack, onUpdateProject }: { project:
 function EditableImage({ layout, isEditMode, onChange, onDelete, className, onClick }: any) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        onChange({ src: event.target?.result as string });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const options = {
+          maxSizeMB: 0.7,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true
+        };
+        const compressedFile = await imageCompression(file, options);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          onChange({ src: event.target?.result as string });
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        console.error("Image compression failed:", error);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          onChange({ src: event.target?.result as string });
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
