@@ -634,7 +634,7 @@ export default function App() {
               className="min-h-screen w-full text-white relative z-10 pt-24 pb-24 px-12"
               onContextMenu={(e) => handleContextMenu(e, '', 'portfolio')}
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1400px] mx-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-[1700px] mx-auto">
                 {projects.length === 0 || projects.filter(p => p.isPortfolio === true).length === 0 ? (
                   <div className="col-span-4 py-20 flex flex-col items-center justify-center gap-4 opacity-50">
                     <p>No projects found.</p>
@@ -654,7 +654,7 @@ export default function App() {
               </div>
 
               {/* Contact Footer */}
-              <div className="mt-32 pt-12 border-t border-white/20 flex flex-col items-start w-full max-w-[1400px] mx-auto">
+              <div className="mt-32 pt-12 border-t border-white/20 flex flex-col items-start w-full max-w-[1700px] mx-auto">
                 <h3 className="text-[15px] font-[system-ui] font-bold uppercase tracking-widest mb-4">Contact</h3>
                 <input
                   value={(profile as any).contact || "hello@eveyul.com"}
