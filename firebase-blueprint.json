@@ -38,6 +38,10 @@
     "/profile/main": {
       "schema": "Profile",
       "description": "The main profile document"
+    },
+    "/metadata/structure": {
+      "schema": "object",
+      "description": "Site structure metadata like categories and subcategories"
     }
   }
 }

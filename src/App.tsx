@@ -155,7 +155,7 @@ export default function App() {
 
         await Promise.all([...batch, metadataPromise]);
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, 'projects/metadata');
+        handleFirestoreError(error, OperationType.WRITE, 'projects & metadata');
       } finally {
         setIsSaving(false);
       }
@@ -252,17 +252,7 @@ export default function App() {
     
     setProjects(prev => {
       const updatedProjects = [...prev, newProject];
-      
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      setIsSaving(true);
-      saveTimeoutRef.current = setTimeout(() => {
-        fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedProjects)
-        }).finally(() => setIsSaving(false));
-      }, 1000);
-
+      saveData(updatedProjects, categories, subCategories);
       return updatedProjects;
     });
   };
@@ -279,27 +269,7 @@ export default function App() {
   const handleDeleteProject = (projectId: number) => {
     setProjects(prev => {
       const updatedProjects = prev.filter(p => p.id !== projectId);
-      
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      setIsSaving(true);
-      saveTimeoutRef.current = setTimeout(() => {
-        fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedProjects)
-        })
-        .then(res => {
-          if (!res.ok) throw new Error("Failed to save");
-          console.log("Saved successfully");
-        })
-        .catch(error => {
-          console.error("Failed to persist project updates:", error);
-        })
-        .finally(() => {
-          setIsSaving(false);
-        });
-      }, 1000);
-
+      saveData(updatedProjects, categories, subCategories);
       return updatedProjects;
     });
   };
@@ -307,27 +277,7 @@ export default function App() {
   const handleUpdateProject = (updatedProject: Project) => {
     setProjects(prev => {
       const updatedProjects = prev.map(p => p.id === updatedProject.id ? updatedProject : p);
-      
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      setIsSaving(true);
-      saveTimeoutRef.current = setTimeout(() => {
-        fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedProjects)
-        })
-        .then(res => {
-          if (!res.ok) throw new Error("Failed to save");
-          console.log("Saved successfully");
-        })
-        .catch(error => {
-          console.error("Failed to persist project updates:", error);
-        })
-        .finally(() => {
-          setIsSaving(false);
-        });
-      }, 1000);
-
+      saveData(updatedProjects, categories, subCategories);
       return updatedProjects;
     });
     setSelectedProject(prev => prev?.id === updatedProject.id ? updatedProject : prev);
@@ -784,7 +734,7 @@ export default function App() {
                         key={project.id} 
                         project={project} 
                         index={index} 
-                        onClick={() => handleProjectClick(project)}
+                        onClick={activeCategory === 'Data Visualization & Information Design' ? () => handleProjectClick(project) : undefined}
                         isEditMode={isCategoryEditMode}
                         onUpdateProject={handleUpdateProject}
                       />
@@ -984,6 +934,12 @@ function CategoryBlogBlock({ project, index, onClick, isEditMode, onUpdateProjec
     extraElements: []
   });
 
+  useEffect(() => {
+    if (project.categoryLayout) {
+      setLayout(project.categoryLayout);
+    }
+  }, [project.categoryLayout]);
+
   const updateLayout = (key: string, value: any) => {
     const newLayout = {
       ...layout,
@@ -1164,6 +1120,12 @@ function ProjectDetail({ project, isAdmin, onBack, onUpdateProject }: { project:
     techText: { x: 650, y: 50, width: 400, fontSize: 16, fontWeight: 400, fontFamily: 'Inter', lineHeight: 1.7, value: "Technical Implementation\n\nUtilizing custom shaders and real-time data processing, the system maintains high performance even with thousands of concurrent data points. The architecture is built for scalability and future-proofing, ensuring a consistent experience across all devices.", color: '#E2E2E2' },
     extraElements: []
   });
+
+  useEffect(() => {
+    if (project.layout) {
+      setLayout(project.layout);
+    }
+  }, [project.layout]);
 
   const fonts = ['Inter', 'Courier New', 'Georgia', 'Playfair Display', 'JetBrains Mono', 'Anton'];
 
