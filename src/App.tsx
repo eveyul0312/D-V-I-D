@@ -264,11 +264,11 @@ export default function App() {
       id: Date.now(),
       title: "New Project",
       description: "Project Description",
-      image: "https://picsum.photos/seed/new/800/1200",
+      image: `https://picsum.photos/seed/${Date.now()}/800/1200`,
       category: category,
       isPortfolio: isPortfolio,
       layout: {
-        heroImg: { x: 0, y: 0, width: 600, height: 600, src: "https://picsum.photos/seed/new/800/1200", wrapText: false }
+        heroImg: { x: 0, y: 0, width: 600, height: 600, src: `https://picsum.photos/seed/${Date.now()}/800/1200`, wrapText: false }
       }
     };
     
@@ -464,19 +464,19 @@ export default function App() {
       id: Date.now(),
       title: type === 'image' ? "New Image" : "New Text",
       description: type === 'image' ? "Image Description" : "Text Description",
-      image: type === 'image' ? "https://picsum.photos/seed/new/800/1200" : "",
+      image: type === 'image' ? `https://picsum.photos/seed/${Date.now()}/800/1200` : "",
       category: activeCategory,
       subCategory: activeSubCategory,
       layout: {
         ...(type === 'image' ? {
-          heroImg: { x, y, width: 600, height: 600, src: "https://picsum.photos/seed/new/800/1200", wrapText: false }
+          heroImg: { x, y, width: 600, height: 600, src: `https://picsum.photos/seed/${Date.now()}/800/1200`, wrapText: false }
         } : {
           mainText: { x, y, width: 400, fontSize: 18, fontWeight: 400, fontFamily: 'Inter', value: "New Text", color: '#E2E2E2' }
         })
       },
       categoryLayout: {
         ...(type === 'image' ? {
-          img: { x, y, width: 600, height: 337, src: "https://picsum.photos/seed/new/800/1200" }
+          img: { x, y, width: 600, height: 337, src: `https://picsum.photos/seed/${Date.now()}/800/1200` }
         } : {
           mainText: { x, y, width: 400, fontSize: 18, fontWeight: 400, fontFamily: 'Inter', value: "New Text", color: '#000000' }
         }),
@@ -840,7 +840,7 @@ function PortfolioGridItem({ project, index, isAdmin, onClick, onUpdateProject, 
     if (file) {
       try {
         const options = {
-          maxSizeMB: 0.7,
+          maxSizeMB: 0.4,
           maxWidthOrHeight: 1920,
           useWebWorker: true
         };
@@ -1002,6 +1002,12 @@ function CategoryBlogBlock({ project, index, onClick, isEditMode, onUpdateProjec
     setLayout(newLayout);
     
     const updatedProject = { ...project, categoryLayout: newLayout };
+    if (key === 'img' && value.src) {
+      updatedProject.image = value.src;
+      if (updatedProject.categoryLayout.img) {
+        delete updatedProject.categoryLayout.img.src;
+      }
+    }
     if (key === 'mainText' && value.value) {
       const lines = value.value.split('\n');
       updatedProject.title = lines[0] || "Untitled";
@@ -1067,7 +1073,7 @@ function CategoryBlogBlock({ project, index, onClick, isEditMode, onUpdateProjec
       y,
       width: 200,
       height: 200,
-      src: 'https://picsum.photos/200/200'
+      src: `https://picsum.photos/seed/${Date.now()}/200/200`
     };
 
     const newLayout = {
@@ -1115,7 +1121,7 @@ function CategoryBlogBlock({ project, index, onClick, isEditMode, onUpdateProjec
       )}
       {!layout.img?.deleted && layout.img && (
         <EditableImage
-          layout={layout.img}
+          layout={{...layout.img, src: layout.img?.src || project.image}}
           isEditMode={isEditMode}
           onChange={(l: any) => updateLayout('img', l)}
           onDelete={() => updateLayout('img', { deleted: true })}
@@ -1235,7 +1241,7 @@ function ProjectDetail({ project, isAdmin, onBack, onUpdateProject }: { project:
       y: contextMenu.relY,
       width: 300,
       height: 300,
-      src: 'https://picsum.photos/300/300'
+      src: `https://picsum.photos/seed/${Date.now()}/300/300`
     };
 
     setLayout((prev: any) => ({
@@ -1262,11 +1268,19 @@ function ProjectDetail({ project, isAdmin, onBack, onUpdateProject }: { project:
   const handleToggleEdit = () => {
     if (isEditMode) {
       // Save changes
+      const updatedLayout = { ...layout };
+      let updatedImage = project.image;
+      if (updatedLayout.heroImg?.src) {
+        updatedImage = updatedLayout.heroImg.src;
+        delete updatedLayout.heroImg.src;
+      }
+
       onUpdateProject({
         ...project,
         title: layout.mainText?.value ? layout.mainText.value.split('\n')[0] : project.title,
         description: layout.mainText?.value ? layout.mainText.value.split('\n').slice(1).join('\n').trim() : project.description,
-        layout: layout
+        image: updatedImage,
+        layout: updatedLayout
       });
     }
     setIsEditMode(!isEditMode);
@@ -1397,7 +1411,7 @@ function ProjectDetail({ project, isAdmin, onBack, onUpdateProject }: { project:
           )}
           {!layout.heroImg?.deleted && layout.heroImg && (
             <EditableImage
-              layout={layout.heroImg}
+              layout={{...layout.heroImg, src: layout.heroImg?.src || project.image}}
               isEditMode={isEditMode}
               onChange={(l: any) => updateLayout('heroImg', l)}
               onDelete={() => updateLayout('heroImg', { deleted: true })}
@@ -1510,7 +1524,7 @@ function EditableImage({ layout, isEditMode, onChange, onDelete, className, onCl
     if (file) {
       try {
         const options = {
-          maxSizeMB: 0.7,
+          maxSizeMB: 0.4,
           maxWidthOrHeight: 1920,
           useWebWorker: true
         };
