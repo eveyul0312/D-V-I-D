@@ -88,6 +88,89 @@ function EditableSubCategory({ subCategory, isActive, isAdmin, onClick, onContex
   );
 }
 
+function AboutSection({ profile }: { profile: any }) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end start"]
+  });
+
+  // Staggered exit animations for each row
+  const row1Opacity = useTransform(scrollYProgress, [0.3, 0.5], [1, 0]);
+  const row1Y = useTransform(scrollYProgress, [0.3, 0.5], [0, -50]);
+
+  const row2Opacity = useTransform(scrollYProgress, [0.5, 0.7], [1, 0]);
+  const row2Y = useTransform(scrollYProgress, [0.5, 0.7], [0, -50]);
+
+  const row3Opacity = useTransform(scrollYProgress, [0.7, 0.9], [1, 0]);
+  const row3Y = useTransform(scrollYProgress, [0.7, 0.9], [0, -50]);
+
+  return (
+    <motion.section 
+      ref={sectionRef}
+      initial={{ backgroundColor: "#ffffff" }}
+      whileInView={{ backgroundColor: "#000000" }}
+      transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+      viewport={{ amount: 0.1 }}
+      className="min-h-screen w-full text-white py-32 px-12 md:px-24 flex flex-col relative z-20"
+    >
+      <div className="max-w-[1700px] mx-auto w-full relative">
+        {/* Row 1: Title */}
+        <motion.div 
+          style={{ opacity: row1Opacity, y: row1Y }}
+          className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-12 border-b-[1.5px] border-white/40 pb-16"
+        >
+          <div className="flex flex-col gap-6">
+            <h2 
+              className="font-bold tracking-tighter uppercase" 
+              style={{ fontFamily: 'Anton, sans-serif', fontSize: '35px' }}
+            >
+              {profile.name || "YEAYUL"}
+            </h2>
+          </div>
+          <div className="hidden lg:block" />
+        </motion.div>
+
+        {/* Row 2: About Us */}
+        <motion.div 
+          style={{ opacity: row2Opacity, y: row2Y }}
+          className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-12 border-b-[1.5px] border-white/40 pt-4 pb-20"
+        >
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[0.1em]">About us</h3>
+          </div>
+          <div className="flex flex-col gap-12 max-w-4xl">
+            <p className="text-lg md:text-xl leading-relaxed opacity-100 font-light font-pretendard">
+              Banquet caters to all forms of Production. Priding ourselves on our craft, creativity and above all story, our always expanding offering and capabilities enable us to find creative solutions to creative problems. Our collaborative approach means we share generously with our partners, with no option left unexplored.
+            </p>
+            <p className="text-lg md:text-xl leading-relaxed opacity-100 font-light font-pretendard">
+              We work together to develop concepts and execute production at scale. Our team of Producers, Directors & Strategists take an approach of not only exciting main ideas, but enhancing them with above and beyond content strategy to roll out across all platforms.
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Row 3: Our Approach */}
+        <motion.div 
+          style={{ opacity: row3Opacity, y: row3Y }}
+          className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-12 pt-4 pb-20"
+        >
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[0.1em]">Our approach</h3>
+          </div>
+          <div className="flex flex-col gap-12 max-w-4xl">
+            <p className="text-lg md:text-xl leading-relaxed opacity-100 font-light font-pretendard">
+              In a landscape where content needs to be diverse, always. Strategists. With more ways to reach audiences than ever before, every screen and format presents an opportunity to engage with them in memorable ways. This thinking has informed our unique production model, which utilises strategy to mould a single piece of content into different shapes and sizes. Every form a piece of content takes should feel bespoke to the channel it's being viewed on, while being complementary to all other outputs.
+            </p>
+            <p className="text-lg md:text-xl leading-relaxed opacity-100 font-light font-pretendard">
+              Our Content Strategy Team ensures there is consistency and cost-effectiveness every step of the way, and can work closely with your team at the concept development stage. The result? Content that's beautifully crafted and engaging wherever, and however, it's being viewed.
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    </motion.section>
+  );
+}
+
 export default function App() {
   const [currentPage, setCurrentPage] = useState<'main' | 'category' | 'detail'>('main');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -106,7 +189,7 @@ export default function App() {
   const [activeSubCategory, setActiveSubCategory] = useState<string>('1주차');
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, target: string, type: 'category' | 'subCategory' | 'emptyPage' | 'portfolio' } | null>(null);
   const [profile, setProfile] = useState({ 
-    name: "eveyul", 
+    name: "YEAYUL", 
     intro: "Interactive Designer & Developer", 
     contact: "hello@eveyul.com",
     introWidth: 250,
@@ -551,20 +634,30 @@ export default function App() {
             {/* Hero Section */}
             <motion.section 
               style={{ opacity: heroOpacity }}
-              className="relative flex h-screen w-full items-center justify-center overflow-hidden"
+              className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-white"
             >
-              {/* Top Left Logo */}
-              <div className="absolute top-12 left-12 z-50">
-                <h1 
-                  className="font-bold tracking-tighter uppercase glow-text"
-                  style={{ fontFamily: 'Courier New', fontSize: '35px' }}
+              {/* Massive Impactful Title - Bold Staircase Behind Dice */}
+              <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center overflow-hidden">
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex flex-col items-center select-none"
+                  style={{ fontFamily: '"Space Grotesk", sans-serif' }}
                 >
-                  eveyul
-                </h1>
+                  <h1 className="text-[18vw] font-bold leading-[0.8] text-black tracking-[-0.08em] -ml-[25vw] -translate-y-[2vw]">
+                    Yeayul
+                  </h1>
+                  <h1 className="text-[18vw] font-bold leading-[0.8] text-black tracking-[-0.08em] ml-[25vw]">
+                    Portfolio
+                  </h1>
+                </motion.div>
               </div>
 
-              {/* 3D Dice Container */}
-              <DiceComponent onMount={(scene) => { diceSceneRef.current = scene; }} />
+              {/* 3D Dice Container - Centered */}
+              <div className="relative z-10 w-full h-full flex items-center justify-center">
+                <DiceComponent onMount={(scene) => { diceSceneRef.current = scene; }} />
+              </div>
 
               {/* Right Navigation Bar */}
               <nav className="absolute right-12 top-1/2 -translate-y-1/2 flex flex-col items-end gap-12 z-50">
@@ -586,20 +679,13 @@ export default function App() {
                   </button>
                 ))}
               </nav>
-
-              {/* Bottom Left Profile */}
-              <div className="absolute bottom-12 left-12 z-50">
-                <ProfileEditor 
-                  profile={profile} 
-                  onSave={saveProfile} 
-                  isAdmin={isAdmin}
-                />
-              </div>
             </motion.section>
+
+            <AboutSection profile={profile} />
 
             {/* Projects Section */}
             <motion.section 
-              initial={{ backgroundColor: "#ffffff" }}
+              initial={{ backgroundColor: "#000000" }}
               whileInView={{ backgroundColor: "#131313" }}
               transition={{ duration: 1 }}
               id="projects-section" 
@@ -655,9 +741,9 @@ export default function App() {
               <button 
                 onClick={() => setCurrentPage('main')}
                 className="font-bold tracking-tighter uppercase cursor-pointer"
-                style={{ fontFamily: 'Courier New', fontSize: '35px' }}
+                style={{ fontFamily: 'Anton, sans-serif', fontSize: '35px' }}
               >
-                eveyul
+                YEAYUL
               </button>
               
               <nav className="flex gap-8">
@@ -811,7 +897,7 @@ function DiceComponent({ onMount }: { onMount: (scene: DiceScene) => void }) {
   return (
     <div 
       ref={containerRef} 
-      className="w-[60vw] h-[60vh] flex items-center justify-center"
+      className="w-full h-full flex items-center justify-center"
     />
   );
 }
@@ -1301,9 +1387,9 @@ function ProjectDetail({ project, isAdmin, onBack, onUpdateProject }: { project:
         <button 
           onClick={onBack}
           className="font-bold tracking-tighter uppercase cursor-pointer"
-          style={{ fontFamily: 'Courier New', fontSize: '35px' }}
+          style={{ fontFamily: 'Anton, sans-serif', fontSize: '35px' }}
         >
-          eveyul
+          YEAYUL
         </button>
         <button 
           onClick={onBack}

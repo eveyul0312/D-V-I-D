@@ -51,7 +51,7 @@ async function startServer() {
     try {
       const profilePath = path.resolve(process.cwd(), "profile.json");
       if (!fs.existsSync(profilePath)) {
-        return res.json({ name: "eveyul", intro: "Interactive Designer & Developer" });
+        return res.json({ name: "YEAYUL", intro: "Interactive Designer & Developer" });
       }
       const data = fs.readFileSync(profilePath, "utf-8");
       res.json(JSON.parse(data));

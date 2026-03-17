@@ -21,7 +21,7 @@ export class DiceScene {
     const height = container.clientHeight || 300;
     const aspect = width / height;
     this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-    this.camera.position.z = 12; // Moved back to fit 3x larger dice
+    this.camera.position.z = 25; // Moved further back for better visibility
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setSize(width, height);
@@ -55,32 +55,31 @@ export class DiceScene {
     this.scene.add(cyanRim);
 
     // Cube Body (Vibrant Red Translucent Resin)
-    const size = 6.6; // 2.2 * 3
-    const geometry = new RoundedBoxGeometry(size, size, size, 10, 1.05); // Increased bevel for larger size
+    const size = 12.0; // Slightly reduced size to ensure visibility
+    const geometry = new RoundedBoxGeometry(size, size, size, 10, 1.5); // Adjusted bevel for new size
     
     const marbledTexture = this.createMarbledTexture();
     
     const material = new THREE.MeshPhysicalMaterial({
       color: 0xff4444,
       map: marbledTexture,
-      metalness: 0.0,
-      roughness: 0.0,
-      transmission: 1.0,
-      thickness: 4.5, // Increased for larger size
+      metalness: 0.1,
+      roughness: 0.1,
+      transmission: 0.0, // Set to 0 for opacity
+      thickness: 0.0,
       ior: 1.45,
-      transparent: true,
+      transparent: false, // Set to false for opacity
       opacity: 1.0,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.0,
-      attenuationColor: 0xff8888,
-      attenuationDistance: 8.0,
+      clearcoatRoughness: 0.1,
     });
 
     this.cube = new THREE.Mesh(geometry, material);
+    this.cube.position.y = 0; // Centered position
     this.scene.add(this.cube);
 
     // Add Symbols (Standard Dots 1-6)
-    this.addSymbols();
+    this.addSymbols(size);
 
     this.animate = this.animate.bind(this);
     this.onResize = this.onResize.bind(this);
@@ -174,7 +173,7 @@ export class DiceScene {
     return texture;
   }
 
-  private addSymbols() {
+  private addSymbols(size: number) {
     const symbolMaterial = (dotCount: number) => {
       const texture = this.createSymbolTexture(dotCount);
       return new THREE.MeshStandardMaterial({
@@ -188,7 +187,6 @@ export class DiceScene {
       });
     };
 
-    const size = 6.6;
     const offset = size / 2 + 0.005;
     const planeSize = size * 0.95;
 
