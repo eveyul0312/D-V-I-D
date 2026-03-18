@@ -18,6 +18,7 @@ import {
   onSnapshot, 
   setDoc, 
   getDoc,
+  deleteDoc,
   handleFirestoreError,
   OperationType,
   User
@@ -108,11 +109,8 @@ function AboutSection({ profile }: { profile: any }) {
   return (
     <motion.section 
       ref={sectionRef}
-      initial={{ backgroundColor: "#ffffff" }}
-      whileInView={{ backgroundColor: "#000000" }}
-      transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
-      viewport={{ amount: 0.1 }}
-      className="min-h-screen w-full text-white py-32 px-12 md:px-24 flex flex-col relative z-20"
+      initial={{ backgroundColor: "#000000" }}
+      className="min-h-[120vh] w-full text-white pt-32 pb-64 px-12 md:px-24 flex flex-col relative z-20"
     >
       <div className="max-w-[1700px] mx-auto w-full relative">
         {/* Row 1: Title */}
@@ -219,7 +217,14 @@ export default function App() {
     }
   };
 
-  const saveData = async (updatedProjects: Project[], updatedCategories: string[], updatedSubCategories: Record<string, string[]>) => {
+  const saveData = async (
+    updatedProjects: Project[], 
+    updatedCategories: string[], 
+    updatedSubCategories: Record<string, string[]>,
+    changedProject?: Project,
+    deletedProjectId?: number,
+    deletedProjectIds?: number[]
+  ) => {
     if (!isAdmin) return;
     setSaveError(null);
     
@@ -228,31 +233,47 @@ export default function App() {
     
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        // Check for oversized projects
-        for (const p of updatedProjects) {
-          const size = new Blob([JSON.stringify(p)]).size;
+        const promises: Promise<any>[] = [];
+
+        if (changedProject) {
+          const size = new Blob([JSON.stringify(changedProject)]).size;
           if (size > 1048576) {
-             setSaveError(`Project "${p.title}" is too large (${(size / 1024 / 1024).toFixed(2)}MB). Firestore limit is 1MB. Please re-upload images for this project to compress them.`);
-             setIsSaving(false);
-             return;
+            setSaveError(`Project "${changedProject.title}" is too large (${(size / 1024 / 1024).toFixed(2)}MB). Firestore limit is 1MB.`);
+            setIsSaving(false);
+            return;
+          }
+          promises.push(setDoc(doc(db, 'projects', changedProject.id.toString()), changedProject));
+        } else if (deletedProjectId !== undefined) {
+          promises.push(deleteDoc(doc(db, 'projects', deletedProjectId.toString())));
+        } else if (deletedProjectIds !== undefined) {
+          deletedProjectIds.forEach(id => {
+            promises.push(deleteDoc(doc(db, 'projects', id.toString())));
+          });
+        } else {
+          // Full sync for category edits or other bulk changes
+          for (const p of updatedProjects) {
+            const size = new Blob([JSON.stringify(p)]).size;
+            if (size > 1048576) {
+              setSaveError(`Project "${p.title}" is too large (${(size / 1024 / 1024).toFixed(2)}MB). Firestore limit is 1MB.`);
+              setIsSaving(false);
+              return;
+            }
+            promises.push(setDoc(doc(db, 'projects', p.id.toString()), p));
           }
         }
 
-        // Save projects to Firestore
-        const batch = updatedProjects.map(p => 
-          setDoc(doc(db, 'projects', p.id.toString()), p)
-        );
-        
-        // Save metadata (categories, subcategories)
-        const metadataPromise = setDoc(doc(db, 'metadata', 'structure'), {
+        // Save metadata
+        promises.push(setDoc(doc(db, 'metadata', 'structure'), {
           categories: updatedCategories,
           subCategories: updatedSubCategories
-        });
+        }));
 
-        await Promise.all([...batch, metadataPromise]);
+        await Promise.all(promises);
       } catch (error: any) {
         if (error.message?.includes('exceeds the maximum allowed size')) {
           setSaveError("One or more documents exceed Firestore's 1MB limit. Please re-upload images to compress them.");
+        } else if (error.message?.includes('Quota limit exceeded')) {
+          setSaveError("Firestore free tier quota exceeded. Please wait for the daily reset (UTC 00:00) or check your billing settings.");
         } else {
           handleFirestoreError(error, OperationType.WRITE, 'projects & metadata');
         }
@@ -357,7 +378,7 @@ export default function App() {
     
     setProjects(prev => {
       const updatedProjects = [...prev, newProject];
-      saveData(updatedProjects, categories, subCategories);
+      saveData(updatedProjects, categories, subCategories, newProject);
       return updatedProjects;
     });
   };
@@ -374,7 +395,7 @@ export default function App() {
   const handleDeleteProject = (projectId: number) => {
     setProjects(prev => {
       const updatedProjects = prev.filter(p => p.id !== projectId);
-      saveData(updatedProjects, categories, subCategories);
+      saveData(updatedProjects, categories, subCategories, undefined, projectId);
       return updatedProjects;
     });
   };
@@ -382,7 +403,7 @@ export default function App() {
   const handleUpdateProject = (updatedProject: Project) => {
     setProjects(prev => {
       const updatedProjects = prev.map(p => p.id === updatedProject.id ? updatedProject : p);
-      saveData(updatedProjects, categories, subCategories);
+      saveData(updatedProjects, categories, subCategories, updatedProject);
       return updatedProjects;
     });
     setSelectedProject(prev => prev?.id === updatedProject.id ? updatedProject : prev);
@@ -500,6 +521,7 @@ export default function App() {
         setCategories(updatedCategories);
         
         // Remove projects in this category
+        const deletedProjectIds = projects.filter(p => p.category === target).map(p => p.id);
         const updatedProjects = projects.filter(p => p.category !== target);
         setProjects(updatedProjects);
         
@@ -509,7 +531,7 @@ export default function App() {
         setSubCategories(updatedSubCategories);
         
         if (activeCategory === target) setActiveCategory(updatedCategories[0]);
-        saveData(updatedProjects, updatedCategories, updatedSubCategories);
+        saveData(updatedProjects, updatedCategories, updatedSubCategories, undefined, undefined, deletedProjectIds);
       } else if (contextMenu?.type === 'subCategory') {
         const target = contextMenu?.target;
         // Use activeCategory instead of searching
@@ -523,11 +545,12 @@ export default function App() {
           setSubCategories(updatedSubCategories);
           
           // Remove projects in this subCategory
+          const deletedProjectIds = projects.filter(p => p.category === categoryOfSub && p.subCategory === target).map(p => p.id);
           const updatedProjects = projects.filter(p => !(p.category === categoryOfSub && p.subCategory === target));
           setProjects(updatedProjects);
           
           if (activeSubCategory === target) setActiveSubCategory(updatedSubCategories[categoryOfSub][0] || '1주차');
-          saveData(updatedProjects, categories, updatedSubCategories);
+          saveData(updatedProjects, categories, updatedSubCategories, undefined, undefined, deletedProjectIds);
         }
       }
     }
@@ -543,35 +566,80 @@ export default function App() {
       y = contextMenu.y - rect.top;
     }
 
-    const newProject: Project = {
-      id: Date.now(),
-      title: type === 'image' ? "New Image" : "New Text",
-      description: type === 'image' ? "Image Description" : "Text Description",
-      image: type === 'image' ? `https://picsum.photos/seed/${Date.now()}/800/1200` : "",
-      category: activeCategory,
-      subCategory: activeSubCategory,
-      layout: {
-        ...(type === 'image' ? {
-          heroImg: { x, y, width: 600, height: 600, src: `https://picsum.photos/seed/${Date.now()}/800/1200`, wrapText: false }
-        } : {
-          mainText: { x, y, width: 400, fontSize: 18, fontWeight: 400, fontFamily: 'Inter', value: "New Text", color: '#E2E2E2' }
-        })
-      },
-      categoryLayout: {
-        ...(type === 'image' ? {
-          img: { x, y, width: 600, height: 337, src: `https://picsum.photos/seed/${Date.now()}/800/1200` }
-        } : {
-          mainText: { x, y, width: 400, fontSize: 18, fontWeight: 400, fontFamily: 'Inter', value: "New Text", color: '#000000' }
-        }),
-        extraElements: []
-      }
-    };
-    
-    setProjects(prev => {
-      const updatedProjects = [...prev, newProject];
-      saveData(updatedProjects, categories, subCategories);
-      return updatedProjects;
-    });
+    const existingProject = projects.find(p => p.category === activeCategory && (p.subCategory || '1주차') === activeSubCategory && !p.isPortfolio);
+
+    if (existingProject) {
+      const newElement = type === 'image' ? {
+        id: Date.now(),
+        type: 'image',
+        x,
+        y,
+        width: 600,
+        height: 337,
+        src: `https://picsum.photos/seed/${Date.now()}/800/1200`
+      } : {
+        id: Date.now(),
+        x,
+        y,
+        width: 400,
+        fontSize: 18,
+        fontWeight: 400,
+        fontFamily: 'Inter',
+        value: "New Text",
+        color: '#000000'
+      };
+
+      const updatedProject = {
+        ...existingProject,
+        categoryLayout: {
+          ...existingProject.categoryLayout,
+          extraElements: [...(existingProject.categoryLayout?.extraElements || []), newElement]
+        }
+      };
+
+      setProjects(prev => {
+        const updatedProjects = prev.map(p => p.id === existingProject.id ? updatedProject : p);
+        saveData(updatedProjects, categories, subCategories, updatedProject);
+        return updatedProjects;
+      });
+    } else {
+      const newProject: Project = {
+        id: Date.now(),
+        title: type === 'image' ? "New Image" : "New Text",
+        description: type === 'image' ? "Image Description" : "Text Description",
+        image: type === 'image' ? `https://picsum.photos/seed/${Date.now()}/800/1200` : "",
+        category: activeCategory,
+        subCategory: activeSubCategory,
+        categoryLayout: {
+          extraElements: [
+            type === 'image' ? {
+              id: Date.now(),
+              type: 'image',
+              x,
+              y,
+              width: 600,
+              height: 337,
+              src: `https://picsum.photos/seed/${Date.now()}/800/1200`
+            } : {
+              id: Date.now(),
+              x,
+              y,
+              width: 400,
+              fontSize: 18,
+              fontWeight: 400,
+              fontFamily: 'Inter',
+              value: "New Text",
+              color: '#000000'
+            }
+          ]
+        }
+      };
+      setProjects(prev => {
+        const updatedProjects = [...prev, newProject];
+        saveData(updatedProjects, categories, subCategories, newProject);
+        return updatedProjects;
+      });
+    }
     setContextMenu(null);
   };
 
@@ -629,7 +697,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="w-full bg-white"
+            className="w-full bg-black"
           >
             {/* Hero Section */}
             <motion.section 
@@ -642,13 +710,12 @@ export default function App() {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 1.5, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex flex-col items-center select-none"
-                  style={{ fontFamily: '"Space Grotesk", sans-serif' }}
+                  className="flex flex-col items-center select-none font-pretendard"
                 >
-                  <h1 className="text-[18vw] font-bold leading-[0.8] text-black tracking-[-0.08em] -ml-[25vw] -translate-y-[2vw]">
+                  <h1 className="text-[18vw] font-black leading-[1.1] text-black tracking-[-0.05em] -ml-[25vw]">
                     Yeayul
                   </h1>
-                  <h1 className="text-[18vw] font-bold leading-[0.8] text-black tracking-[-0.08em] ml-[25vw]">
+                  <h1 className="text-[18vw] font-black leading-[1.1] text-black tracking-[-0.05em] ml-[25vw]">
                     Portfolio
                   </h1>
                 </motion.div>
@@ -686,10 +753,9 @@ export default function App() {
             {/* Projects Section */}
             <motion.section 
               initial={{ backgroundColor: "#000000" }}
-              whileInView={{ backgroundColor: "#131313" }}
-              transition={{ duration: 1 }}
+              animate={{ backgroundColor: "#000000" }}
               id="projects-section" 
-              className="min-h-screen w-full text-white relative z-10 pt-24 pb-24 px-12"
+              className="min-h-screen w-full text-white relative z-10 pt-32 pb-24 px-12"
               onContextMenu={(e) => handleContextMenu(e, '', 'portfolio')}
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-[1700px] mx-auto">
@@ -805,7 +871,11 @@ export default function App() {
             </aside>
 
             {/* Project List */}
-            <div ref={categoryContainerRef} className="pt-48 pb-24 px-12 max-w-5xl mx-auto">
+            <div 
+              ref={categoryContainerRef} 
+              className="pt-48 pb-24 px-12 max-w-5xl mx-auto min-h-screen relative"
+              onContextMenu={(e) => handleContextMenu(e, '', 'emptyPage')}
+            >
               {/* Floating Action Button for Edit Mode */}
               {isAdmin && (
                 <button
@@ -958,10 +1028,14 @@ function PortfolioGridItem({ project, index, isAdmin, onClick, onUpdateProject, 
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 100 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: (index % 4) * 0.1 }}
+      viewport={{ once: false, margin: "-100px" }}
+      transition={{ 
+        duration: 1, 
+        delay: (index % 4) * 0.1,
+        ease: [0.22, 1, 0.36, 1]
+      }}
       className="flex flex-col gap-4 relative group"
     >
       <div 
@@ -1179,10 +1253,27 @@ function CategoryBlogBlock({ project, index, onClick, isEditMode, onUpdateProjec
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
+  const getMaxHeight = () => {
+    let max = 1000;
+    if (layout.img && !layout.img.deleted) {
+      max = Math.max(max, (layout.img.y || 0) + (layout.img.height || 337));
+    }
+    if (layout.mainText && !layout.mainText.deleted) {
+      max = Math.max(max, (layout.mainText.y || 0) + 400);
+    }
+    if (layout.extraElements) {
+      layout.extraElements.forEach((el: any) => {
+        max = Math.max(max, (el.y || 0) + (el.height || 200));
+      });
+    }
+    return max + 1000;
+  };
+
   return (
     <motion.section
       ref={sectionRef as any}
-      className="mb-48 last:mb-0 relative min-h-[600px]"
+      className="relative"
+      style={{ minHeight: `${getMaxHeight()}px` }}
       onContextMenu={handleContextMenu}
       onClick={() => setContextMenu(null)}
     >
