@@ -9,6 +9,7 @@ import { Edit2, Check, Type, Move, Maximize2, ChevronDown, Image as ImageIcon, U
 import { 
   auth, 
   db, 
+  storage,
   googleProvider, 
   signInWithPopup, 
   signOut, 
@@ -21,7 +22,10 @@ import {
   deleteDoc,
   handleFirestoreError,
   OperationType,
-  User
+  User,
+  ref,
+  uploadBytes,
+  getDownloadURL
 } from './firebase';
 
 function cn(...inputs: ClassValue[]) {
@@ -996,19 +1000,29 @@ function PortfolioGridItem({ project, index, isAdmin, onClick, onUpdateProject, 
     if (file) {
       try {
         const options = {
-          maxSizeMB: 0.4,
-          maxWidthOrHeight: 1920,
+          maxSizeMB: 25,
+          maxWidthOrHeight: 4096,
           useWebWorker: true
         };
         const compressedFile = await imageCompression(file, options);
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          onUpdateProject({ ...project, image: event.target?.result as string });
-        };
-        reader.readAsDataURL(compressedFile);
+        
+        try {
+          // Try to upload to Firebase Storage
+          const storageRef = ref(storage, `images/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, compressedFile);
+          const downloadURL = await getDownloadURL(storageRef);
+          onUpdateProject({ ...project, image: downloadURL });
+        } catch (storageError) {
+          console.error("Firebase Storage upload failed (check rules). Falling back to Base64:", storageError);
+          // Fallback to base64 if Storage is not configured or rules deny access
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            onUpdateProject({ ...project, image: event.target?.result as string });
+          };
+          reader.readAsDataURL(compressedFile);
+        }
       } catch (error) {
         console.error("Image compression failed:", error);
-        // Fallback to original if compression fails for some reason
         const reader = new FileReader();
         reader.onload = (event) => {
           onUpdateProject({ ...project, image: event.target?.result as string });
@@ -1701,16 +1715,27 @@ function EditableImage({ layout, isEditMode, onChange, onDelete, className, onCl
     if (file) {
       try {
         const options = {
-          maxSizeMB: 0.4,
-          maxWidthOrHeight: 1920,
+          maxSizeMB: 25,
+          maxWidthOrHeight: 4096,
           useWebWorker: true
         };
         const compressedFile = await imageCompression(file, options);
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          onChange({ src: event.target?.result as string });
-        };
-        reader.readAsDataURL(compressedFile);
+        
+        try {
+          // Try to upload to Firebase Storage
+          const storageRef = ref(storage, `images/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, compressedFile);
+          const downloadURL = await getDownloadURL(storageRef);
+          onChange({ src: downloadURL });
+        } catch (storageError) {
+          console.error("Firebase Storage upload failed (check rules). Falling back to Base64:", storageError);
+          // Fallback to base64 if Storage is not configured or rules deny access
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            onChange({ src: event.target?.result as string });
+          };
+          reader.readAsDataURL(compressedFile);
+        }
       } catch (error) {
         console.error("Image compression failed:", error);
         const reader = new FileReader();
